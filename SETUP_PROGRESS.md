@@ -1,5 +1,16 @@
 # 설정 진행 상황 (2026-11-18 업데이트)
 
+## 👉 다음에 여기서부터: ① 결제 → ② Enable workflow → ③ 실행 확인
+현재 상태: 설정 전부 완료, 워크플로는 **꺼져 있음(Disabled)** — 사용자가 직접 끔.
+
+1. **결제**: https://console.anthropic.com/settings/billing → 카드 등록 → 크레딧 $5 구매
+2. **다시 켜기**: https://github.com/pchanew-pixel/-/actions/workflows/daily-news.yml
+   → 위쪽 "This workflow was disabled" 옆 **Enable workflow** (없으면 오른쪽 위 ⋯ → Enable workflow)
+3. **실행 확인**: 같은 화면 **Run workflow** → 초록 **Run workflow** → 2~3분 뒤 ✅ → 블로그 확인
+   (❌ 이면 Claude에게 "SETUP_PROGRESS.md 보고 실패 원인 봐줘")
+
+---
+
 ## 🎯 남은 일: 딱 1개 — Claude API 크레딧 충전
 
 설정은 **전부 끝났습니다.** 첫 테스트 실행에서 뉴스 수집·API 키·Secret 모두 정상 확인됨.
