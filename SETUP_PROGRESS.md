@@ -18,8 +18,8 @@
 
 ## ⚠️ 충전 전까지
 - 매일 아침 실행되고 실패하며, GitHub에서 실패 알림 메일이 올 수 있음 (무시해도 됨)
-- 메일이 싫으면: Actions → Daily Keyword News → 오른쪽 ⋯ → **Disable workflow**
-  (이 경우 충전 후 같은 곳에서 **Enable workflow** 를 꼭 눌러야 함)
+- 메일이 싫으면: https://github.com/pchanew-pixel/-/actions/workflows/daily-news.yml → 오른쪽 위 ⋯ → **Disable workflow**
+  (이 경우 충전 후 같은 주소에서 **Enable workflow** 를 꼭 눌러야 함 — 실행 기록 화면 말고 이 주소!)
 
 ## ✅ 완료된 것
 - 자동화 코드 (뉴스 수집 → Claude 요약 → 이메일로 Blogger 게시), 매일 07:07 KST 실행
