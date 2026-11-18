@@ -1,13 +1,18 @@
 """매일 아침 경제·시사 키워드 뉴스 매거진을 생성해 Blogger에 자동 게시한다.
 
 필요한 환경변수 (GitHub Secrets):
-  ANTHROPIC_API_KEY, BLOGGER_BLOG_ID,
-  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+  공통: ANTHROPIC_API_KEY
+  [간편] 이메일 게시: BLOGGER_POST_EMAIL, GMAIL_ADDRESS, GMAIL_APP_PASSWORD
+  [고급] Blogger API: BLOGGER_BLOG_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+  BLOGGER_POST_EMAIL 이 있으면 이메일 방식으로 게시한다.
 선택: DRY_RUN=1 이면 게시하지 않고 HTML만 output.html 로 저장.
 """
 import html
 import os
+import smtplib
 import sys
+from email.header import Header
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 
 import anthropic
@@ -144,6 +149,19 @@ def publish(title: str, content: str, labels: list[str]) -> str:
     return post.get("url", post.get("id"))
 
 
+def publish_by_email(title: str, content: str) -> str:
+    """Blogger의 '이메일로 게시' 주소로 Gmail SMTP를 통해 글을 보낸다."""
+    sender = os.environ["GMAIL_ADDRESS"]
+    msg = MIMEText(content, "html", "utf-8")
+    msg["Subject"] = Header(title, "utf-8")
+    msg["From"] = sender
+    msg["To"] = os.environ["BLOGGER_POST_EMAIL"]
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(sender, os.environ["GMAIL_APP_PASSWORD"].replace(" ", ""))
+        smtp.send_message(msg)
+    return "이메일 게시 요청 전송 (블로그에 1~2분 내 반영)"
+
+
 def main():
     today = datetime.now(KST).strftime("%Y년 %m월 %d일")
     mag = write_magazine(collect_news(), today)
@@ -153,7 +171,10 @@ def main():
             f.write(f"<h1>{html.escape(mag.title)}</h1>\n{content}")
         print("DRY_RUN: output.html 저장 완료")
         return
-    print("게시 완료:", publish(mag.title, content, mag.labels))
+    if os.environ.get("BLOGGER_POST_EMAIL"):
+        print("게시 완료:", publish_by_email(mag.title, content))
+    else:
+        print("게시 완료:", publish(mag.title, content, mag.labels))
 
 
 if __name__ == "__main__":
