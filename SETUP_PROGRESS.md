@@ -1,13 +1,10 @@
-# 설정 진행 상황 (2026-11-18 업데이트)
+# 설정 진행 상황 (2026-11-19 업데이트)
 
-## 👉 다음에 여기서부터: ① 결제 → ② Enable workflow → ③ 실행 확인
-현재 상태: 설정 전부 완료, 워크플로는 **꺼져 있음(Disabled)** — 사용자가 직접 끔.
-
-1. **결제**: https://console.anthropic.com/settings/billing → 카드 등록 → 크레딧 $5 구매
-2. **다시 켜기**: https://github.com/pchanew-pixel/-/actions/workflows/daily-news.yml
-   → 위쪽 "This workflow was disabled" 옆 **Enable workflow** (없으면 오른쪽 위 ⋯ → Enable workflow)
-3. **실행 확인**: 같은 화면 **Run workflow** → 초록 **Run workflow** → 2~3분 뒤 ✅ → 블로그 확인
-   (❌ 이면 Claude에게 "SETUP_PROGRESS.md 보고 실패 원인 봐줘")
+## 🎉 완료! (2026-11-19) 자동 게시 동작 확인
+- 워크플로 켜짐(Enabled), 매일 07:07 KST 자동 게시
+- 블로그 게시 주소 오류(Address not found)를 고친 뒤 블로그에 글이 올라온 것 확인
+- 문제가 생기면: Claude에게 "SETUP_PROGRESS.md 보고 실패 원인 봐줘"
+- Gmail에 "Mail Delivery Subsystem" 메일이 오면 → Blogger 설정의 이메일 게시 주소와 `BLOGGER_POST_EMAIL` 이 같은지 확인
 
 ---
 
