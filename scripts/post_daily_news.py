@@ -86,6 +86,8 @@ def collect_news() -> tuple[str, dict[int, Source]]:
                 if outlet and title.endswith(f" - {outlet}"):
                     title = title[: -len(f" - {outlet}")]
                 outlet = outlet.split(":")[0].split("|")[0].strip() or "원문"
+                if "최신기사" in outlet:  # 예: "연합뉴스 경제 최신기사" → "연합뉴스"
+                    outlet = outlet.split()[0]
                 n = len(sources) + 1
                 sources[n] = {"outlet": outlet, "title": title, "url": link}
                 desc = re.sub(r"<[^>]+>", " ", html.unescape(entry.get("summary", "")))
@@ -101,6 +103,7 @@ RULES = """[정확성 — 최우선]
 - 자료가 제목뿐이거나 내용이 짧으면 요약도 짧게 쓰세요. 분량을 채우려고 추측하거나 일반론을 덧붙이지 마세요.
 - why_it_matters 는 자료로 직접 뒷받침되는 의미나 영향이 있을 때만 한 문장으로 쓰고, 없으면 반드시 빈 문자열("")로 두세요.
   억지로 독자의 생활과 연결하지 마세요.
+- 인물 이름·직함·기관명은 자료에 적힌 그대로만 쓰세요. 자료에 "한 총리"라고만 있으면 이름을 덧붙이지 마세요.
 - 확정되지 않은 사안은 "~할 계획", "~를 검토 중"처럼 자료에 적힌 수준 그대로 표현하세요."""
 
 STYLE = """[선별]
