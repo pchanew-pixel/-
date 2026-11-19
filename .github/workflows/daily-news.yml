@@ -5,6 +5,10 @@ on:
     - cron: "7 22 * * *"   # 매일 07:07 KST (UTC 22:07)
   workflow_dispatch: {}     # Actions 탭에서 수동 실행 버튼
 
+permissions:
+  contents: read
+  actions: write   # 60일 비활동 자동 중지 방지용
+
 jobs:
   post:
     runs-on: ubuntu-latest
@@ -33,3 +37,8 @@ jobs:
           name: output
           path: output.html
           if-no-files-found: ignore
+      - name: Keep schedule alive
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable daily-news.yml --repo "$GITHUB_REPOSITORY" || true
