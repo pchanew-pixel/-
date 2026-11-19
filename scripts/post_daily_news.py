@@ -131,9 +131,10 @@ def _call(news: str, task: str) -> Magazine:
 {RULES}
 
 {STYLE}"""
-    response = client.beta.messages.parse(
+    # 최고 사양(max)은 생각을 길게 하므로 넉넉한 토큰 + 스트리밍으로 받는다
+    with client.beta.messages.stream(
         model=MODEL,
-        max_tokens=16000,
+        max_tokens=64000,
         output_config={"effort": "max"},
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
@@ -145,7 +146,8 @@ def _call(news: str, task: str) -> Magazine:
             ],
         }],
         output_format=Magazine,
-    )
+    ) as stream:
+        response = stream.get_final_message()
     u = response.usage
     cw, cr = u.cache_creation_input_tokens or 0, u.cache_read_input_tokens or 0
     # Sonnet 5.5 단가(USD/100만 토큰): 입력 2, 캐시쓰기 2.5, 캐시읽기 0.1, 출력 10
