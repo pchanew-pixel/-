@@ -105,11 +105,20 @@ def write_magazine(news: str, today: str) -> Magazine:
 - 자료에 없는 사실·수치·인용은 절대 만들지 마세요. 확실하지 않은 전망은 단정하지 마세요.
 - source_ids 에는 근거가 된 자료의 [N번] 숫자만 넣으세요(1~3개).
 
-[문체]
-- 경제 뉴스를 꾸준히 챙겨 보는 블로거가 독자에게 설명하듯, 자연스럽고 읽기 쉬운 존댓말로 쓰세요.
-- 문장 길이와 시작을 다양하게 하고, "~에 대해 알아보겠습니다", "결론적으로", "다양한", "중요한 역할" 같은
-  상투적인 표현과 과장된 수식어는 피하세요. 같은 어미를 연달아 반복하지 마세요.
-- why_it_matters 는 "그래서 내 지갑·투자·생활에 무슨 의미인지"를 구체적으로 쓰세요.
+[문체 — 가장 중요]
+- 매일 아침 경제 뉴스를 챙겨 읽는 30대 직장인 블로거가 이웃에게 이야기하듯 쓰세요.
+  딱딱한 보고서나 보도자료 말투가 아니라, 읽는 사람이 고개를 끄덕일 만한 생활 감각이 묻어나는 존댓말.
+- 항목마다 같은 틀을 반복하지 마세요. 어떤 건 배경부터, 어떤 건 숫자부터, 어떤 건 질문으로 시작하는 식으로
+  도입을 바꾸고, 문단 길이도 내용 무게에 따라 다르게 하세요(중요한 건 길게, 가벼운 건 짧게).
+- 다음 표현은 쓰지 마세요: "~에 대해 알아보겠습니다", "~를 살펴보겠습니다", "결론적으로", "요약하자면",
+  "다양한", "중요한 역할", "주목할 만한", "시사하는 바가 크다", "귀추가 주목된다", "~할 것으로 보입니다"의 반복,
+  "여러분", 과도한 느낌표와 이모지.
+- "~습니다"만 연달아 쓰지 말고 "~죠", "~더라고요", "~네요" 같은 어미를 적당히 섞되 과하지 않게.
+- why_it_matters 는 제목 없이 그대로 읽혀도 자연스러운 한두 문장으로, "그래서 내 월급·대출·투자·장바구니에
+  무슨 의미인지"를 구체적으로. 매번 같은 말로 시작하지 마세요.
+- intro 는 오늘 아침 분위기를 한 줄로 잡고 핵심 키워드로 자연스럽게 이어지게.
+  closing 은 교훈조나 "좋은 하루 되세요" 같은 인사 대신, 오늘 뉴스를 보고 든 짧은 생각이나
+  앞으로 지켜볼 일정 하나로 담백하게 마무리.
 
 [검색 노출(SEO)]
 - title: 가장 큰 핵심 키워드 2~3개를 앞쪽에 넣은 40자 안팎의 제목. 날짜는 "11월 19일"처럼 짧게 넣고,
@@ -132,51 +141,71 @@ def write_magazine(news: str, today: str) -> Magazine:
     return response.parsed_output
 
 
-H2 = ("font-size:1.6em;font-weight:800;color:#111;margin:1.6em 0 0.6em;"
-      "padding:0.3em 0 0.3em 0.6em;border-left:6px solid #2a6df4;line-height:1.35")
-H3 = "font-size:1.3em;font-weight:800;color:#111;margin:1.4em 0 0.5em;line-height:1.4"
+ACCENT = {"경제": ("#1f6feb", "#eef4ff"), "시사": ("#d4572a", "#fff3ee")}
+FONT = ("font-family:'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;"
+        "color:#222;font-size:16px;line-height:1.85;word-break:keep-all")
 
 
 def render_html(mag: Magazine, today: str, sources: dict[int, Source]) -> str:
     e = html.escape
-    parts = [
-        f'<p style="color:#666;font-size:0.95em">📅 {e(today)} · 오늘의 키워드 뉴스</p>',
-        f'<div style="background:#f4f7ff;border-radius:10px;padding:1em 1.2em;margin:1em 0;'
-        f'font-size:1.05em;line-height:1.7">{e(mag.intro)}</div>',
-    ]
-    # 목차
-    toc = "".join(f"<li><b>{e(i.keyword)}</b> — {e(i.headline)}</li>" for i in mag.items)
-    parts.append(f'<p style="font-weight:700;margin-bottom:0.3em">📌 오늘의 키워드</p><ol>{toc}</ol>')
+    out = [f'<div style="{FONT};max-width:720px;margin:0 auto">']
+
+    # 상단: 날짜 + 인트로
+    out.append(
+        f'<p style="margin:0 0 6px;font-size:13px;letter-spacing:0.08em;color:#8a8f98;font-weight:600">'
+        f'{e(today)} · MORNING BRIEF</p>'
+        f'<p style="margin:0 0 28px;font-size:18px;line-height:1.8;color:#333">{e(mag.intro)}</p>'
+    )
+
+    # 키워드 칩 목차
+    chips = "".join(
+        f'<span style="display:inline-block;margin:0 6px 8px 0;padding:6px 12px;border-radius:999px;'
+        f'background:{ACCENT.get(i.category, ACCENT["경제"])[1]};color:{ACCENT.get(i.category, ACCENT["경제"])[0]};'
+        f'font-size:14px;font-weight:700">#{e(i.keyword.lstrip("#"))}</span>'
+        for i in mag.items
+    )
+    out.append(
+        f'<div style="padding:18px 20px 10px;border:1px solid #e6e8ec;border-radius:14px;margin-bottom:36px">'
+        f'<p style="margin:0 0 12px;font-size:14px;font-weight:800;color:#555">오늘의 키워드</p>{chips}</div>'
+    )
 
     for cat in ("경제", "시사"):
         items = [i for i in mag.items if i.category == cat]
         if not items:
             continue
-        parts.append(f'<h2 style="{H2}">{"💰" if cat == "경제" else "🗞️"} {cat} 뉴스</h2>')
-        for i in items:
-            srcs = [sources[n] for n in dict.fromkeys(i.source_ids) if n in sources]
+        color, bg = ACCENT[cat]
+        out.append(
+            f'<h2 style="margin:44px 0 18px;padding-bottom:10px;border-bottom:3px solid {color};'
+            f'font-size:26px;font-weight:800;color:#111;line-height:1.3">{cat}</h2>'
+        )
+        for n, i in enumerate(items, 1):
+            srcs = [sources[k] for k in dict.fromkeys(i.source_ids) if k in sources]
             links = "".join(
-                f'<li><a href="{e(s["url"])}" rel="noopener nofollow">'
-                f'{e(s["outlet"])} | {e(s["title"])}</a></li>'
+                f'<li style="margin:4px 0"><a href="{e(s["url"])}" rel="noopener nofollow" '
+                f'style="color:#555;text-decoration:underline">{e(s["title"])}</a>'
+                f'<span style="color:#999"> · {e(s["outlet"])}</span></li>'
                 for s in srcs
             )
-            parts.append(
-                f'<h3 style="{H3}"><span style="color:#2a6df4">#{e(i.keyword.lstrip("#"))}</span> '
-                f"{e(i.headline)}</h3>"
-                f'<p style="line-height:1.8">{e(i.summary)}</p>'
-                f'<p style="line-height:1.8">👉 <b>왜 중요할까?</b> {e(i.why_it_matters)}</p>'
+            out.append(
+                f'<div style="margin:0 0 34px">'
+                f'<p style="margin:0 0 4px;font-size:13px;font-weight:800;color:{color}">'
+                f'{n:02d} · #{e(i.keyword.lstrip("#"))}</p>'
+                f'<h3 style="margin:0 0 12px;font-size:21px;font-weight:800;color:#111;line-height:1.45">'
+                f'{e(i.headline)}</h3>'
+                f'<p style="margin:0 0 14px">{e(i.summary)}</p>'
+                f'<div style="margin:0 0 12px;padding:14px 16px;background:{bg};border-radius:10px;'
+                f'border-left:4px solid {color};color:#333">{e(i.why_it_matters)}</div>'
+                + (f'<ul style="margin:0;padding-left:18px;font-size:13px">{links}</ul>' if links else "")
+                + "</div>"
             )
-            if links:
-                parts.append(
-                    f'<p style="font-size:0.9em;color:#555;margin-bottom:0.2em">📰 관련 기사</p>'
-                    f'<ul style="font-size:0.9em">{links}</ul>'
-                )
-    parts.append(f'<hr><p style="line-height:1.8">{e(mag.closing)}</p>')
-    parts.append(
-        '<p style="font-size:0.8em;color:#888">※ 공개된 언론 보도를 바탕으로 AI 도구의 도움을 받아 정리했습니다. '
-        "정확한 내용은 위 관련 기사 원문을 확인해 주세요.</p>"
+
+    out.append(
+        f'<div style="margin-top:40px;padding:22px 20px;background:#f7f7f8;border-radius:14px;'
+        f'font-size:16px;color:#333">{e(mag.closing)}</div>'
+        f'<p style="margin-top:18px;font-size:12px;color:#9aa0a6">각 항목 아래 링크에서 기사 원문을 확인할 수 있습니다.</p>'
+        "</div>"
     )
-    return "\n".join(parts)
+    return "\n".join(out)
 
 
 def publish(title: str, content: str, labels: list[str]) -> str:
