@@ -151,14 +151,50 @@ def publish(title: str, content: str, labels: list[str]) -> str:
 
 def publish_by_email(title: str, content: str) -> str:
     """Blogger의 '이메일로 게시' 주소로 Gmail SMTP를 통해 글을 보낸다."""
-    sender = os.environ["GMAIL_ADDRESS"]
+    sender = os.environ["GMAIL_ADDRESS"].strip()
+    to_addr = os.environ["BLOGGER_POST_EMAIL"].strip()
+    password = "".join(os.environ["GMAIL_APP_PASSWORD"].split())  # 공백·줄바꿈 제거
+
+    # 값 형식 점검 (값 자체는 출력하지 않음)
+    problems = []
+    if not sender.lower().endswith("@gmail.com"):
+        problems.append("GMAIL_ADDRESS 가 '...@gmail.com' 형식이 아닙니다.")
+    if not to_addr.lower().endswith("@blogger.com"):
+        problems.append("BLOGGER_POST_EMAIL 이 '...@blogger.com' 형식이 아닙니다.")
+    if len(password) != 16 or not password.isascii() or not password.isalpha():
+        problems.append(
+            f"GMAIL_APP_PASSWORD 는 영문 16글자여야 하는데, 지금은 {len(password)}글자입니다. "
+            "https://myaccount.google.com/apppasswords 에서 새로 발급해 다시 등록하세요."
+        )
+    if problems:
+        raise RuntimeError("Secret 값 확인 필요:\n- " + "\n- ".join(problems))
+
     msg = MIMEText(content, "html", "utf-8")
     msg["Subject"] = Header(title, "utf-8")
     msg["From"] = sender
-    msg["To"] = os.environ["BLOGGER_POST_EMAIL"]
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(sender, os.environ["GMAIL_APP_PASSWORD"].replace(" ", ""))
+    msg["To"] = to_addr
+
+    def send(smtp):
+        smtp.login(sender, password)
         smtp.send_message(msg)
+
+    try:
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=60) as smtp:
+                send(smtp)
+        except (smtplib.SMTPServerDisconnected, OSError) as e:
+            if isinstance(e, smtplib.SMTPAuthenticationError):
+                raise
+            print(f"[info] 465 포트 실패({type(e).__name__}), 587 포트로 재시도")
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=60) as smtp:
+                smtp.starttls()
+                send(smtp)
+    except smtplib.SMTPAuthenticationError as e:
+        raise RuntimeError(
+            "Gmail 로그인 거절: GMAIL_ADDRESS 와 GMAIL_APP_PASSWORD 가 같은 구글 계정 것인지, "
+            "앱 비밀번호가 맞는지 확인하세요. "
+            f"(서버 응답 코드 {e.smtp_code})"
+        ) from None
     return "이메일 게시 요청 전송 (블로그에 1~2분 내 반영)"
 
 
@@ -166,9 +202,10 @@ def main():
     today = datetime.now(KST).strftime("%Y년 %m월 %d일")
     mag = write_magazine(collect_news(), today)
     content = render_html(mag, today)
+    # 게시가 실패해도 만든 글은 남도록 항상 파일로 저장 (Actions 결과의 output 파일)
+    with open("output.html", "w", encoding="utf-8") as f:
+        f.write(f"<h1>{html.escape(mag.title)}</h1>\n{content}")
     if os.environ.get("DRY_RUN") == "1":
-        with open("output.html", "w", encoding="utf-8") as f:
-            f.write(f"<h1>{html.escape(mag.title)}</h1>\n{content}")
         print("DRY_RUN: output.html 저장 완료")
         return
     if os.environ.get("BLOGGER_POST_EMAIL"):

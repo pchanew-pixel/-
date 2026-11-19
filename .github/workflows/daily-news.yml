@@ -26,3 +26,10 @@ jobs:
           BLOGGER_POST_EMAIL: ${{ secrets.BLOGGER_POST_EMAIL }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      - name: Save generated post
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: output
+          path: output.html
+          if-no-files-found: ignore
