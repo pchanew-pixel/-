@@ -385,6 +385,10 @@ def main():
     if os.environ.get("DRY_RUN") == "1":
         print("DRY_RUN: 파일 저장 완료")
     elif mode == "preview":
+        import json
+        used = {k: sources[k] for i in mag.items for k in i.source_ids if k in sources}
+        print("[preview-json] " + json.dumps(
+            {"today": today, "mag": mag.model_dump(), "sources": used}, ensure_ascii=False))
         me = os.environ["GMAIL_ADDRESS"]
         print("미리보기:", publish_by_email(f"[미리보기] {mag.title}", content, to_addr=me))
     else:
