@@ -3,7 +3,17 @@ name: Daily Keyword News
 on:
   schedule:
     - cron: "7 22 * * *"   # 매일 07:07 KST (UTC 22:07)
-  workflow_dispatch: {}     # Actions 탭에서 수동 실행 버튼
+  workflow_dispatch:        # Actions 탭에서 수동 실행 버튼
+    inputs:
+      mode:
+        description: "publish=바로 게시 / preview=내 메일로 미리보기 / publish_saved=미리보기 글 그대로 게시"
+        type: choice
+        options: [publish, preview, publish_saved]
+        default: publish
+      run_id:
+        description: "publish_saved 일 때만: 미리보기 실행 번호(Run ID)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -20,8 +30,16 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Download saved preview
+        if: ${{ inputs.mode == 'publish_saved' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: output
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
       - run: python scripts/post_daily_news.py
         env:
+          MODE: ${{ inputs.mode || 'publish' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -35,7 +53,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: output
-          path: output.html
+          path: |
+            output.html
+            title.txt
           if-no-files-found: ignore
       - name: Keep schedule alive
         if: always()

@@ -5,7 +5,11 @@
   [간편] 이메일 게시: BLOGGER_POST_EMAIL, GMAIL_ADDRESS, GMAIL_APP_PASSWORD
   [고급] Blogger API: BLOGGER_BLOG_ID, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
   BLOGGER_POST_EMAIL 이 있으면 이메일 방식으로 게시한다.
-선택: DRY_RUN=1 이면 게시하지 않고 HTML만 output.html 로 저장.
+MODE (워크플로 실행 시 선택):
+  publish       : 글 생성 → 블로그 게시 (기본값, 매일 아침 자동 실행)
+  preview       : 글 생성 → 블로그 대신 내 Gmail로 미리보기 발송 (게시 안 함)
+  publish_saved : 미리보기로 만든 글(output.html, title.txt)을 그대로 블로그에 게시 (AI 비용 없음)
+선택: DRY_RUN=1 이면 게시하지 않고 파일만 저장.
 """
 import html
 import os
@@ -112,6 +116,7 @@ STYLE = """[선별]
 - closing: 자료에 근거해 오늘 뉴스의 공통 흐름을 정리하거나, 자료에 나온 향후 일정 하나를 짚는 1~2문장. 사견·덕담 금지."""
 
 
+COST_LOG: list[float] = []
 MODEL = "claude-sonnet-5-5"  # 비용 절감: Opus 대비 입력·출력 단가 절반
 
 
@@ -129,7 +134,7 @@ def _call(news: str, task: str) -> Magazine:
     response = client.beta.messages.parse(
         model=MODEL,
         max_tokens=16000,
-        output_config={"effort": "medium"},
+        output_config={"effort": "max"},
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
         messages=[{
@@ -142,8 +147,12 @@ def _call(news: str, task: str) -> Magazine:
         output_format=Magazine,
     )
     u = response.usage
-    print(f"[usage] in={u.input_tokens} cache_write={u.cache_creation_input_tokens} "
-          f"cache_read={u.cache_read_input_tokens} out={u.output_tokens}")
+    cw, cr = u.cache_creation_input_tokens or 0, u.cache_read_input_tokens or 0
+    # Sonnet 5.5 단가(USD/100만 토큰): 입력 2, 캐시쓰기 2.5, 캐시읽기 0.1, 출력 10
+    cost = (u.input_tokens * 2 + cw * 2.5 + cr * 0.1 + u.output_tokens * 10) / 1_000_000
+    COST_LOG.append(cost)
+    print(f"[usage] in={u.input_tokens} cache_write={cw} cache_read={cr} out={u.output_tokens} "
+          f"→ ${cost:.4f}")
     if response.stop_reason == "refusal" or response.parsed_output is None:
         raise RuntimeError(f"글 생성 실패: stop_reason={response.stop_reason}")
     return response.parsed_output
@@ -285,17 +294,18 @@ def publish(title: str, content: str, labels: list[str]) -> str:
     return post.get("url", post.get("id"))
 
 
-def publish_by_email(title: str, content: str) -> str:
+def publish_by_email(title: str, content: str, to_addr: str | None = None) -> str:
     """Blogger의 '이메일로 게시' 주소로 Gmail SMTP를 통해 글을 보낸다."""
     sender = os.environ["GMAIL_ADDRESS"].strip()
-    to_addr = os.environ["BLOGGER_POST_EMAIL"].strip()
+    preview = to_addr is not None
+    to_addr = (to_addr or os.environ["BLOGGER_POST_EMAIL"]).strip()
     password = "".join(os.environ["GMAIL_APP_PASSWORD"].split())  # 공백·줄바꿈 제거
 
     # 값 형식 점검 (값 자체는 출력하지 않음)
     problems = []
     if not sender.lower().endswith("@gmail.com"):
         problems.append("GMAIL_ADDRESS 가 '...@gmail.com' 형식이 아닙니다.")
-    if not to_addr.lower().endswith("@blogger.com"):
+    if not preview and not to_addr.lower().endswith("@blogger.com"):
         problems.append("BLOGGER_POST_EMAIL 이 '...@blogger.com' 형식이 아닙니다.")
     if len(password) != 16 or not password.isascii() or not password.isalpha():
         problems.append(
@@ -334,7 +344,24 @@ def publish_by_email(title: str, content: str) -> str:
     return "이메일 게시 요청 전송 (블로그에 1~2분 내 반영)"
 
 
+def post(title: str, content: str, labels: list[str]) -> None:
+    if os.environ.get("BLOGGER_POST_EMAIL"):
+        print("게시 완료:", publish_by_email(title, content))
+    else:
+        print("게시 완료:", publish(title, content, labels))
+
+
 def main():
+    mode = (os.environ.get("MODE") or "publish").strip()
+
+    if mode == "publish_saved":  # 미리보기 글을 그대로 게시 (AI 호출 없음)
+        with open("title.txt", encoding="utf-8") as f:
+            title = f.read().strip()
+        with open("output.html", encoding="utf-8") as f:
+            content = f.read()
+        post(title, content, [])
+        return
+
     today = datetime.now(KST).strftime("%Y년 %m월 %d일")
     news, sources = collect_news()
     mag = write_magazine(news, today)
@@ -346,16 +373,22 @@ def main():
     if not mag.items:
         raise RuntimeError("근거가 확인된 뉴스 항목이 없어 게시를 중단합니다.")
     content = render_html(mag, today, sources)
+    total = sum(COST_LOG)
+    print(f"[cost] 오늘 AI 비용 합계: ${total:.4f} (약 {total * 1400:.0f}원, 환율 1,400원 가정)")
+
     # 게시가 실패해도 만든 글은 남도록 항상 파일로 저장 (Actions 결과의 output 파일)
     with open("output.html", "w", encoding="utf-8") as f:
-        f.write(f"<h1>{html.escape(mag.title)}</h1>\n{content}")
+        f.write(content)
+    with open("title.txt", "w", encoding="utf-8") as f:
+        f.write(mag.title)
+
     if os.environ.get("DRY_RUN") == "1":
-        print("DRY_RUN: output.html 저장 완료")
-        return
-    if os.environ.get("BLOGGER_POST_EMAIL"):
-        print("게시 완료:", publish_by_email(mag.title, content))
+        print("DRY_RUN: 파일 저장 완료")
+    elif mode == "preview":
+        me = os.environ["GMAIL_ADDRESS"]
+        print("미리보기:", publish_by_email(f"[미리보기] {mag.title}", content, to_addr=me))
     else:
-        print("게시 완료:", publish(mag.title, content, mag.labels))
+        post(mag.title, content, mag.labels)
 
 
 if __name__ == "__main__":
