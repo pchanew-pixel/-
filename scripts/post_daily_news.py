@@ -131,11 +131,11 @@ def _call(news: str, task: str) -> Magazine:
 {RULES}
 
 {STYLE}"""
-    # 최고 사양(max)은 생각을 길게 하므로 넉넉한 토큰 + 스트리밍으로 받는다
+    # 생각 깊이 high. 토큰은 넉넉히 + 스트리밍으로 받는다
     with client.beta.messages.stream(
         model=MODEL,
         max_tokens=64000,
-        output_config={"effort": "max"},
+        output_config={"effort": "high"},
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
         messages=[{
