@@ -37,7 +37,7 @@ FEEDS = {
         "https://www.yna.co.kr/rss/international.xml",
     ],
 }
-MAX_PER_FEED = 15
+MAX_PER_FEED = 12
 
 
 class KeywordItem(BaseModel):
@@ -85,7 +85,7 @@ def collect_news() -> tuple[str, dict[int, Source]]:
                 n = len(sources) + 1
                 sources[n] = {"outlet": outlet, "title": title, "url": link}
                 desc = re.sub(r"<[^>]+>", " ", html.unescape(entry.get("summary", "")))
-                desc = re.sub(r"\s+", " ", desc).strip()[:600]
+                desc = re.sub(r"\s+", " ", desc).strip()[:400]
                 lines.append(f"[{n}번][{category}][{outlet}] {title}\n  내용: {desc}")
     if not lines:
         raise RuntimeError("수집된 뉴스가 없습니다. RSS 주소를 확인하세요.")
@@ -112,32 +112,45 @@ STYLE = """[선별]
 - closing: 자료에 근거해 오늘 뉴스의 공통 흐름을 정리하거나, 자료에 나온 향후 일정 하나를 짚는 1~2문장. 사견·덕담 금지."""
 
 
-def _call(prompt: str) -> Magazine:
+MODEL = "claude-sonnet-5-5"  # 비용 절감: Opus 대비 입력·출력 단가 절반
+
+
+def _call(news: str, task: str) -> Magazine:
+    """뉴스 자료+규칙(공통 앞부분)은 캐시해서, 두 번째 호출(팩트체크)에서 싸게 재사용한다."""
     client = anthropic.Anthropic()
+    shared = f"""아래는 오늘 아침 수집한 한국 뉴스 자료입니다.
+
+[자료]
+{news}
+
+{RULES}
+
+{STYLE}"""
     response = client.beta.messages.parse(
-        model="claude-opus-5-5",
+        model=MODEL,
         max_tokens=16000,
         output_config={"effort": "medium"},
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": shared, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": task},
+            ],
+        }],
         output_format=Magazine,
     )
+    u = response.usage
+    print(f"[usage] in={u.input_tokens} cache_write={u.cache_creation_input_tokens} "
+          f"cache_read={u.cache_read_input_tokens} out={u.output_tokens}")
     if response.stop_reason == "refusal" or response.parsed_output is None:
         raise RuntimeError(f"글 생성 실패: stop_reason={response.stop_reason}")
     return response.parsed_output
 
 
 def write_magazine(news: str, today: str) -> Magazine:
-    draft = _call(f"""오늘은 {today}입니다. 아래는 오늘 아침 수집한 한국 뉴스 자료입니다.
-
-{news}
-
-이 자료로 경제·시사 브리프 블로그 글을 작성하세요.
-
-{RULES}
-
-{STYLE}
+    draft = _call(news, f"""오늘은 {today}입니다. 위 자료로 경제·시사 브리프 블로그 글을 작성하세요.
 
 [구성]
 - category: "경제" 또는 "시사" 둘 중 하나만.
@@ -147,14 +160,11 @@ def write_magazine(news: str, today: str) -> Magazine:
 - labels: 블로그 라벨 5개 안팎.""")
 
     # 2차 검수: 초안의 모든 문장을 자료와 대조해 근거 없는 내용을 지운다
-    return _call(f"""당신은 경제 매거진의 팩트체크 담당 편집자입니다.
-아래 [자료]와 [초안]을 문장 단위로 대조하세요.
-
-[자료]
-{news}
+    return _call(news, f"""당신은 경제 매거진의 팩트체크 담당 편집자입니다.
+위 [자료]와 아래 [초안]을 문장 단위로 대조하세요.
 
 [초안(JSON)]
-{draft.model_dump_json(indent=1)}
+{draft.model_dump_json()}
 
 검수 기준:
 - 각 항목의 summary·why_it_matters 문장이 그 항목 source_ids 자료에 실제로 적힌 내용인지 확인하세요.
@@ -162,11 +172,7 @@ def write_magazine(news: str, today: str) -> Magazine:
 - why_it_matters 가 자료로 뒷받침되지 않으면 빈 문자열("")로 바꾸세요.
 - 중요도가 낮거나 선별 기준에 맞지 않는 항목(재난·안전 안내, 홍보, 연예 등)은 통째로 빼세요.
 - 문체 기준에 어긋나는 표현은 고치세요.
-- 새로운 사실을 추가하지 마세요. 결과는 같은 JSON 구조로 반환하세요.
-
-{RULES}
-
-{STYLE}""")
+- 새로운 사실을 추가하지 마세요. 결과는 같은 JSON 구조로 반환하세요.""")
 
 
 # 상징색: 신뢰감을 주는 딥 네이비 + 옅은 틴트
