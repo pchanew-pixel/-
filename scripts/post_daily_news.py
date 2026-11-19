@@ -141,29 +141,48 @@ def write_magazine(news: str, today: str) -> Magazine:
     return response.parsed_output
 
 
-INK, SUB, LINE, POINT = "#111111", "#8c8c8c", "#e9e9e9", "#ff4f00"
+# 상징색: 신뢰감을 주는 딥 네이비 + 옅은 틴트
+BRAND, TINT, INK, SUB, LINE = "#1f3b73", "#f3f6fb", "#1a1a1a", "#8a8f99", "#e6e9ef"
 FONT = ("font-family:'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;"
         f"color:{INK};font-size:17px;line-height:1.9;letter-spacing:-0.01em;word-break:keep-all")
-LABEL = f"font-size:12px;font-weight:700;letter-spacing:0.14em;color:{SUB};text-transform:uppercase"
+LABEL = "font-size:12px;font-weight:700;letter-spacing:0.12em"
 CAT_EN = {"경제": "ECONOMY", "시사": "ISSUE"}
 
 
 def render_html(mag: Magazine, today: str, sources: dict[int, Source]) -> str:
     e = html.escape
     kw = lambda i: e(i.keyword.lstrip("#"))
+    text_len = len(mag.intro + mag.closing + "".join(i.summary + i.why_it_matters for i in mag.items))
+    minutes = max(2, round(text_len / 500))  # 한국어 분당 약 500자
     out = [f'<div style="{FONT};max-width:680px;margin:0 auto">']
 
-    # 상단
+    # 마스트헤드
     out.append(
-        f'<p style="margin:0 0 20px;{LABEL}">Morning Brief — {e(today)}</p>'
-        f'<p style="margin:0 0 28px;font-size:19px;line-height:1.75;font-weight:500">{e(mag.intro)}</p>'
+        f'<div style="border-top:4px solid {BRAND};padding-top:14px;margin-bottom:22px">'
+        f'<span style="{LABEL};color:{BRAND}">KEYWORD BRIEF</span>'
+        f'<span style="{LABEL};color:{SUB};font-weight:500;letter-spacing:0.04em">'
+        f'&nbsp;&nbsp;·&nbsp;&nbsp;{e(today)}&nbsp;&nbsp;·&nbsp;&nbsp;읽는 시간 약 {minutes}분</span></div>'
     )
-    # 키워드 한 줄
+    # 인트로
     out.append(
-        f'<p style="margin:0 0 48px;padding:16px 0;border-top:1px solid {INK};border-bottom:1px solid {LINE};'
-        f'font-size:15px;line-height:1.9"><b style="margin-right:10px">TODAY</b>'
-        + f'<span style="color:{SUB}"> / </span>'.join(kw(i) for i in mag.items)
-        + "</p>"
+        f'<p style="margin:0 0 32px;padding:18px 20px;background:{TINT};border-radius:12px;'
+        f'font-size:18px;line-height:1.8">{e(mag.intro)}</p>'
+    )
+    # 목차
+    rows, num = [], 0
+    for cat in ("경제", "시사"):
+        for i in (x for x in mag.items if x.category == cat):
+            num += 1
+            rows.append(
+                f'<tr><td style="padding:7px 12px 7px 0;vertical-align:top;color:{BRAND};font-weight:800;'
+                f'font-size:14px;white-space:nowrap">{num:02d}</td>'
+                f'<td style="padding:7px 0;font-size:15px;line-height:1.6"><b>{kw(i)}</b>'
+                f'<span style="color:{SUB}"> — {e(i.headline)}</span></td></tr>'
+            )
+    out.append(
+        f'<div style="margin:0 0 48px;padding:18px 20px 12px;border:1px solid {LINE};border-radius:12px">'
+        f'<p style="margin:0 0 8px;{LABEL};color:{BRAND}">IN THIS BRIEF</p>'
+        f'<table style="border-collapse:collapse;width:100%">{"".join(rows)}</table></div>'
     )
 
     num = 0
@@ -172,34 +191,40 @@ def render_html(mag: Magazine, today: str, sources: dict[int, Source]) -> str:
         if not items:
             continue
         out.append(
-            f'<h2 style="margin:56px 0 28px;font-size:13px;font-weight:800;letter-spacing:0.18em;color:{INK}">'
-            f'{CAT_EN[cat]}<span style="color:{SUB};font-weight:500;letter-spacing:0"> · {cat}</span></h2>'
+            f'<h2 style="margin:56px 0 30px;padding-bottom:10px;border-bottom:2px solid {BRAND};'
+            f'font-size:22px;font-weight:800;color:{INK}">{cat}'
+            f'<span style="{LABEL};color:{BRAND};margin-left:10px">{CAT_EN[cat]}</span></h2>'
         )
         for i in items:
             num += 1
             srcs = [sources[k] for k in dict.fromkeys(i.source_ids) if k in sources]
             links = "<br>".join(
-                f'<a href="{e(s["url"])}" rel="noopener nofollow" style="color:{SUB};text-decoration:none;'
-                f'border-bottom:1px solid {LINE}">{e(s["outlet"])} ↗ {e(s["title"])}</a>'
+                f'<a href="{e(s["url"])}" rel="noopener nofollow" style="color:{SUB};text-decoration:none">'
+                f'<span style="color:{BRAND}">↗</span> {e(s["title"])} · {e(s["outlet"])}</a>'
                 for s in srcs
             )
             out.append(
-                f'<div style="margin:0 0 52px">'
-                f'<p style="margin:0 0 6px;font-size:13px;font-weight:700;color:{POINT}">'
-                f'{num:02d}<span style="color:{SUB};font-weight:500">&nbsp;&nbsp;#{kw(i)}</span></p>'
-                f'<h3 style="margin:0 0 16px;font-size:24px;font-weight:800;line-height:1.4;letter-spacing:-0.02em">'
+                f'<div style="margin:0 0 56px">'
+                f'<p style="margin:0 0 4px;font-size:30px;font-weight:300;color:{BRAND};line-height:1.2">'
+                f'{num:02d}</p>'
+                f'<p style="margin:0 0 8px;font-size:14px;font-weight:700;color:{BRAND}">#{kw(i)}</p>'
+                f'<h3 style="margin:0 0 16px;font-size:23px;font-weight:800;line-height:1.45;letter-spacing:-0.02em">'
                 f'{e(i.headline)}</h3>'
-                f'<p style="margin:0 0 16px">{e(i.summary)}</p>'
-                f'<p style="margin:0 0 16px;padding-left:14px;border-left:2px solid {POINT};font-weight:600">'
-                f'{e(i.why_it_matters)}</p>'
-                + (f'<p style="margin:0;font-size:13px;line-height:1.8">{links}</p>' if links else "")
+                f'<p style="margin:0 0 18px">{e(i.summary)}</p>'
+                f'<div style="margin:0 0 16px;padding:14px 18px;background:{TINT};border-left:3px solid {BRAND};'
+                f'border-radius:0 10px 10px 0">'
+                f'<p style="margin:0 0 4px;{LABEL};color:{BRAND}">생활 포인트</p>'
+                f'<p style="margin:0">{e(i.why_it_matters)}</p></div>'
+                + (f'<p style="margin:0;font-size:13px;line-height:1.9">{links}</p>' if links else "")
                 + "</div>"
             )
 
     out.append(
-        f'<div style="margin-top:64px;padding-top:24px;border-top:1px solid {INK}">'
-        f'<p style="margin:0 0 10px;{LABEL}">Editor’s Note</p>'
-        f'<p style="margin:0">{e(mag.closing)}</p></div>'
+        f'<div style="margin-top:56px;padding:22px 22px;background:{BRAND};border-radius:14px;color:#ffffff">'
+        f'<p style="margin:0 0 8px;{LABEL};color:#b9c6e4">EDITOR’S NOTE</p>'
+        f'<p style="margin:0;color:#ffffff">{e(mag.closing)}</p></div>'
+        f'<p style="margin:20px 0 0;font-size:13px;color:{SUB};text-align:center">'
+        f'매일 아침, 꼭 알아야 할 경제·시사 키워드를 정리합니다.</p>'
         "</div>"
     )
     return "\n".join(out)
