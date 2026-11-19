@@ -9,6 +9,7 @@
 """
 import html
 import os
+import re
 import smtplib
 import sys
 from email.header import Header
@@ -43,8 +44,8 @@ class KeywordItem(BaseModel):
     keyword: str          # 예: "기준금리"
     category: str         # "경제" 또는 "시사"
     headline: str         # 소제목 (핵심 키워드 포함)
-    summary: str          # 3~4문장 요약 + 배경 설명 (자체 문장)
-    why_it_matters: str   # 독자 생활·투자에 미치는 영향 1~2문장
+    summary: str          # 자료에 근거한 2~4문장 요약
+    why_it_matters: str   # 자료로 뒷받침되는 의미·영향 1문장. 근거가 없으면 빈 문자열
     source_ids: list[int] # 자료의 [N번] 번호
 
 
@@ -83,50 +84,36 @@ def collect_news() -> tuple[str, dict[int, Source]]:
                 outlet = outlet.split(":")[0].split("|")[0].strip() or "원문"
                 n = len(sources) + 1
                 sources[n] = {"outlet": outlet, "title": title, "url": link}
-                desc = html.unescape(entry.get("summary", ""))[:300]
+                desc = re.sub(r"<[^>]+>", " ", html.unescape(entry.get("summary", "")))
+                desc = re.sub(r"\s+", " ", desc).strip()[:600]
                 lines.append(f"[{n}번][{category}][{outlet}] {title}\n  내용: {desc}")
     if not lines:
         raise RuntimeError("수집된 뉴스가 없습니다. RSS 주소를 확인하세요.")
     return "\n".join(lines), sources
 
 
-def write_magazine(news: str, today: str) -> Magazine:
+RULES = """[정확성 — 최우선]
+- 오직 위 자료에 적힌 사실만 쓰세요. 자료에 없는 수치·날짜·인물 발언·정책·할인·이벤트·전망은 한 글자도 만들지 마세요.
+- 자료가 제목뿐이거나 내용이 짧으면 요약도 짧게 쓰세요. 분량을 채우려고 추측하거나 일반론을 덧붙이지 마세요.
+- why_it_matters 는 자료로 직접 뒷받침되는 의미나 영향이 있을 때만 한 문장으로 쓰고, 없으면 반드시 빈 문자열("")로 두세요.
+  억지로 독자의 생활과 연결하지 마세요.
+- 확정되지 않은 사안은 "~할 계획", "~를 검토 중"처럼 자료에 적힌 수준 그대로 표현하세요."""
+
+STYLE = """[선별]
+- 경제·사회·정치·국제 흐름에서 실제로 중요한 뉴스 5~8개를 고르세요(경제 비중을 더 크게).
+  재난·안전 안내 문자, 행사·캠페인 홍보, 연예·스포츠, 단순 사건사고, 기업 홍보성 기사는 제외하세요.
+- 같은 사건의 기사는 하나로 묶으세요. 개수를 채우려고 가벼운 뉴스를 넣지 마세요.
+
+[문체 — 매거진형 기사]
+- 경제 매거진 에디터의 문체: 정확하고 간결한 "~습니다/~입니다"체. 한 문장에 한 가지 정보.
+- 구어체·감탄·개인 경험담("~더라고요", "~네요", "~죠", "출근길에 보니")은 쓰지 마세요.
+- 상투어와 과장("주목할 만한", "귀추가 주목된다", "충격", "역대급", "알아보겠습니다", "여러분")은 쓰지 마세요.
+- intro: 오늘 브리프의 핵심 흐름을 1~2문장으로 담담하게.
+- closing: 자료에 근거해 오늘 뉴스의 공통 흐름을 정리하거나, 자료에 나온 향후 일정 하나를 짚는 1~2문장. 사견·덕담 금지."""
+
+
+def _call(prompt: str) -> Magazine:
     client = anthropic.Anthropic()
-    prompt = f"""오늘은 {today}입니다. 아래는 오늘 아침 수집한 한국 경제·시사 뉴스입니다.
-
-{news}
-
-이 자료로 경제·시사 블로그의 '오늘의 키워드 뉴스' 글을 써 주세요.
-
-[내용]
-- 가장 중요한 키워드 8~10개를 고르세요(경제 5~6, 시사 3~4). 같은 사건의 기사는 하나로 묶으세요.
-- 기사 문장을 옮기지 말고 직접 소화한 문장으로 쓰세요. 단순 요약을 넘어 배경과 맥락을 한두 문장 덧붙여,
-  기사를 여러 개 읽지 않아도 흐름이 이해되게 하세요.
-- 자료에 없는 사실·수치·인용은 절대 만들지 마세요. 확실하지 않은 전망은 단정하지 마세요.
-- source_ids 에는 근거가 된 자료의 [N번] 숫자만 넣으세요(1~3개).
-
-[문체 — 가장 중요]
-- 매일 아침 경제 뉴스를 챙겨 읽는 30대 직장인 블로거가 이웃에게 이야기하듯 쓰세요.
-  딱딱한 보고서나 보도자료 말투가 아니라, 읽는 사람이 고개를 끄덕일 만한 생활 감각이 묻어나는 존댓말.
-- 항목마다 같은 틀을 반복하지 마세요. 어떤 건 배경부터, 어떤 건 숫자부터, 어떤 건 질문으로 시작하는 식으로
-  도입을 바꾸고, 문단 길이도 내용 무게에 따라 다르게 하세요(중요한 건 길게, 가벼운 건 짧게).
-- 다음 표현은 쓰지 마세요: "~에 대해 알아보겠습니다", "~를 살펴보겠습니다", "결론적으로", "요약하자면",
-  "다양한", "중요한 역할", "주목할 만한", "시사하는 바가 크다", "귀추가 주목된다", "~할 것으로 보입니다"의 반복,
-  "여러분", 과도한 느낌표와 이모지.
-- "~습니다"만 연달아 쓰지 말고 "~죠", "~더라고요", "~네요" 같은 어미를 적당히 섞되 과하지 않게.
-- why_it_matters 는 제목 없이 그대로 읽혀도 자연스러운 한두 문장으로, "그래서 내 월급·대출·투자·장바구니에
-  무슨 의미인지"를 구체적으로. 매번 같은 말로 시작하지 마세요.
-- intro 는 오늘 아침 분위기를 한 줄로 잡고 핵심 키워드로 자연스럽게 이어지게.
-  closing 은 교훈조나 "좋은 하루 되세요" 같은 인사 대신, 오늘 뉴스를 보고 든 짧은 생각이나
-  앞으로 지켜볼 일정 하나로 담백하게 마무리.
-
-[검색 노출(SEO)]
-- title: 가장 큰 핵심 키워드 2~3개를 앞쪽에 넣은 40자 안팎의 제목. 날짜는 "11월 19일"처럼 짧게 넣고,
-  낚시성·자극적인 표현은 쓰지 마세요.
-- headline: 각 키워드가 포함된, 검색어처럼 구체적인 소제목.
-- intro: 2~3문장. 오늘의 핵심 키워드 몇 개가 자연스럽게 들어가게.
-- labels: 블로그 라벨 5개 안팎(예: 경제뉴스, 오늘의뉴스, 핵심 키워드)."""
-
     response = client.beta.messages.parse(
         model="claude-opus-5-5",
         max_tokens=16000,
@@ -139,6 +126,47 @@ def write_magazine(news: str, today: str) -> Magazine:
     if response.stop_reason == "refusal" or response.parsed_output is None:
         raise RuntimeError(f"글 생성 실패: stop_reason={response.stop_reason}")
     return response.parsed_output
+
+
+def write_magazine(news: str, today: str) -> Magazine:
+    draft = _call(f"""오늘은 {today}입니다. 아래는 오늘 아침 수집한 한국 뉴스 자료입니다.
+
+{news}
+
+이 자료로 경제·시사 브리프 블로그 글을 작성하세요.
+
+{RULES}
+
+{STYLE}
+
+[구성]
+- category: "경제" 또는 "시사" 둘 중 하나만.
+- source_ids: 근거가 된 자료의 [N번] 숫자(1~3개). 모든 항목에 반드시 근거 자료가 있어야 합니다.
+- title: 핵심 키워드 2~3개를 앞에 둔 40자 안팎의 담백한 제목. 날짜는 "11월 19일"처럼 짧게. 낚시성 표현 금지.
+- headline: 해당 키워드를 포함한 사실 중심의 소제목.
+- labels: 블로그 라벨 5개 안팎.""")
+
+    # 2차 검수: 초안의 모든 문장을 자료와 대조해 근거 없는 내용을 지운다
+    return _call(f"""당신은 경제 매거진의 팩트체크 담당 편집자입니다.
+아래 [자료]와 [초안]을 문장 단위로 대조하세요.
+
+[자료]
+{news}
+
+[초안(JSON)]
+{draft.model_dump_json(indent=1)}
+
+검수 기준:
+- 각 항목의 summary·why_it_matters 문장이 그 항목 source_ids 자료에 실제로 적힌 내용인지 확인하세요.
+  자료에 없는 사실·수치·할인·혜택·전망이 섞인 문장은 삭제하거나 자료 수준으로 고치세요.
+- why_it_matters 가 자료로 뒷받침되지 않으면 빈 문자열("")로 바꾸세요.
+- 중요도가 낮거나 선별 기준에 맞지 않는 항목(재난·안전 안내, 홍보, 연예 등)은 통째로 빼세요.
+- 문체 기준에 어긋나는 표현은 고치세요.
+- 새로운 사실을 추가하지 마세요. 결과는 같은 JSON 구조로 반환하세요.
+
+{RULES}
+
+{STYLE}""")
 
 
 # 상징색: 신뢰감을 주는 딥 네이비 + 옅은 틴트
@@ -211,10 +239,13 @@ def render_html(mag: Magazine, today: str, sources: dict[int, Source]) -> str:
                 f'<h3 style="margin:0 0 16px;font-size:23px;font-weight:800;line-height:1.45;letter-spacing:-0.02em">'
                 f'{e(i.headline)}</h3>'
                 f'<p style="margin:0 0 18px">{e(i.summary)}</p>'
-                f'<div style="margin:0 0 16px;padding:14px 18px;background:{TINT};border-left:3px solid {BRAND};'
-                f'border-radius:0 10px 10px 0">'
-                f'<p style="margin:0 0 4px;{LABEL};color:{BRAND}">생활 포인트</p>'
-                f'<p style="margin:0">{e(i.why_it_matters)}</p></div>'
+                + (
+                    f'<div style="margin:0 0 16px;padding:14px 18px;background:{TINT};border-left:3px solid {BRAND};'
+                    f'border-radius:0 10px 10px 0">'
+                    f'<p style="margin:0 0 4px;{LABEL};color:{BRAND}">WHY IT MATTERS</p>'
+                    f'<p style="margin:0">{e(i.why_it_matters)}</p></div>'
+                    if i.why_it_matters.strip() else ""
+                )
                 + (f'<p style="margin:0;font-size:13px;line-height:1.9">{links}</p>' if links else "")
                 + "</div>"
             )
@@ -301,6 +332,13 @@ def main():
     today = datetime.now(KST).strftime("%Y년 %m월 %d일")
     news, sources = collect_news()
     mag = write_magazine(news, today)
+    # 근거 자료가 없는 항목은 버리고, 분류는 경제/시사로 정리
+    mag.items = [i for i in mag.items if any(k in sources for k in i.source_ids)]
+    for i in mag.items:
+        if i.category not in ("경제", "시사"):
+            i.category = "시사"
+    if not mag.items:
+        raise RuntimeError("근거가 확인된 뉴스 항목이 없어 게시를 중단합니다.")
     content = render_html(mag, today, sources)
     # 게시가 실패해도 만든 글은 남도록 항상 파일로 저장 (Actions 결과의 output 파일)
     with open("output.html", "w", encoding="utf-8") as f:
