@@ -1,0 +1,26 @@
+name: Check Naver Verification
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect blog head
+        run: |
+          set -u
+          FEED="https://www.blogger.com/feeds/6351311870752132213/posts/default?max-results=1&alt=json"
+          URL=$(curl -sSL "$FEED" | python3 -c "import json,sys;d=json.load(sys.stdin);print([l['href'] for l in d['feed']['link'] if l['rel']=='alternate'][0])")
+          echo "BLOG_URL=$URL"
+          for UA in "Mozilla/5.0" "Mozilla/5.0 (compatible; Yeti/1.1; +https://naver.me/spd)"; do
+            echo "=== User-Agent: $UA"
+            curl -sSL -A "$UA" -o page.html -w "HTTP %{http_code}  final=%{url_effective}\n" "$URL"
+            echo "--- naver meta:"; grep -o '<meta[^>]*naver-site-verification[^>]*>' page.html || echo "(없음)"
+            echo "--- robots meta:"; grep -io '<meta[^>]*name=.robots[^>]*>' page.html || echo "(없음)"
+            echo "--- head 첫 부분:"; tr -d '\r' < page.html | grep -n -m1 -i '<head' ; sed -n '1,400p' page.html | tr '\n' ' ' | grep -o '<head[^>]*>.\{0,600\}' | head -c 700; echo
+          done
+          echo "=== robots.txt"; curl -sSL "${URL%/}/robots.txt" | head -20
