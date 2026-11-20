@@ -165,15 +165,52 @@ def _call(news: str, task: str) -> Magazine:
     return response.parsed_output
 
 
+BLOG_FEED = "https://www.blogger.com/feeds/6351311870752132213/posts/default?alt=json&max-results=3"
+
+
+def recent_posts() -> str:
+    """최근 게시글의 제목·소제목을 가져와 중복 방지에 쓴다. 실패해도 글쓰기는 계속한다."""
+    import json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(BLOG_FEED, timeout=20) as r:
+            entries = json.load(r).get("feed", {}).get("entry", [])
+    except Exception as e:  # 네트워크 문제 등
+        print(f"[warn] 최근 글 불러오기 실패: {e}", file=sys.stderr)
+        return ""
+    lines = []
+    for en in entries:
+        title = en.get("title", {}).get("$t", "")
+        body = en.get("content", {}).get("$t", "")
+        heads = re.findall(r"<h3[^>]*>(.*?)</h3>", body, flags=re.S)
+        heads = [re.sub(r"<[^>]+>", "", h).strip() for h in heads]
+        lines.append(f"- {en.get('published', {}).get('$t', '')[:10]} {title}")
+        lines += [f"    · {h}" for h in heads if h]
+    return "\n".join(lines)
+
+
 def write_magazine(news: str, today: str) -> Magazine:
+    recent = recent_posts()
+    recent_block = f"""
+[최근 게시한 글 — 중복 금지]
+{recent}
+- 위에서 이미 다룬 사건은 다시 넣지 마세요. 단, 오늘 자료에 의미 있는 새 진전(새 수치·결정·발표)이 있으면
+  그 새 내용만 짧게 다루고 headline 도 새 진전 중심으로 쓰세요.
+""" if recent else ""
     draft = _call(news, f"""오늘은 {today}입니다. 위 자료로 경제·시사 브리프 블로그 글을 작성하세요.
 
 [구성]
 - category: "경제" 또는 "시사" 둘 중 하나만.
 - source_ids: 근거가 된 자료의 [N번] 숫자(1~3개). 모든 항목에 반드시 근거 자료가 있어야 합니다.
-- title: 핵심 키워드 2~3개를 앞에 둔 40자 안팎의 담백한 제목. 날짜는 "11월 19일"처럼 짧게. 낚시성 표현 금지.
-- headline: 해당 키워드를 포함한 사실 중심의 소제목.
-- labels: 블로그 라벨 5개 안팎.""")
+- title: 사람들이 실제로 검색할 핵심 키워드 2~3개를 맨 앞에 둔 40자 안팎의 담백한 제목.
+  날짜는 "11월 19일"처럼 짧게. 낚시성·과장 표현 금지.
+- headline: 그 항목의 검색 키워드(고유명사·수치)를 앞쪽에 둔 사실 중심 소제목.
+- intro: 첫 문장에 오늘의 가장 큰 키워드 2~3개가 자연스럽게 들어가게.
+- summary: 첫 문장에 그 항목의 키워드를 자연스럽게 한 번 넣으세요. 키워드를 억지로 반복하지는 마세요.
+- labels: 해시태그로 쓸 검색 키워드 6~8개. 띄어쓰기 없이(예: 경제뉴스, 오늘의뉴스, 환율, 기준금리, 엔비디아).
+  고유명사·이슈 키워드 위주로, 일반어는 2개 이하.
+- 날짜: 자료에 적힌 날짜 표현("19일(현지시간)" 등)만 쓰고, "오늘·어제"는 쓰지 마세요.
+{recent_block}""")
 
     # 2차 검수: 초안의 모든 문장을 자료와 대조해 근거 없는 내용을 지운다
     return _call(news, f"""당신은 경제 매거진의 팩트체크 담당 편집자입니다.
@@ -187,6 +224,8 @@ def write_magazine(news: str, today: str) -> Magazine:
   자료에 없는 사실·수치·할인·혜택·전망이 섞인 문장은 삭제하거나 자료 수준으로 고치세요.
 - why_it_matters 가 자료로 뒷받침되지 않으면 빈 문자열("")로 바꾸세요.
 - 주제가 겹치는 항목(같은 사건·같은 인물의 후속 기사)은 하나로 합치세요.
+- 최근 게시한 글과 같은 사건을 새 진전 없이 반복한 항목은 빼세요.
+{recent_block}
 - 중요도가 낮거나 선별 기준에 맞지 않는 항목(재난·안전 안내, 홍보, 연예 등)은 통째로 빼세요.
 - 문체 기준에 어긋나는 표현은 고치세요.
 - 새로운 사실을 추가하지 마세요. 결과는 같은 JSON 구조로 반환하세요.""")
@@ -277,7 +316,13 @@ def render_html(mag: Magazine, today: str, sources: dict[int, Source]) -> str:
         f'<div style="margin-top:56px;padding:22px 22px;background:{BRAND};border-radius:14px;color:#ffffff">'
         f'<p style="margin:0 0 8px;{LABEL};color:#b9c6e4">EDITOR’S NOTE</p>'
         f'<p style="margin:0;color:#ffffff">{e(mag.closing)}</p></div>'
-        f'<p style="margin:20px 0 0;font-size:13px;color:{SUB};text-align:center">'
+        + (
+            f'<p style="margin:24px 0 0;font-size:14px;line-height:2;color:{BRAND}">'
+            + " ".join(f"#{e(re.sub(r'\s+', '', t.lstrip('#')))}" for t in mag.labels if t.strip())
+            + "</p>"
+            if mag.labels else ""
+        )
+        + f'<p style="margin:20px 0 0;font-size:13px;color:{SUB};text-align:center">'
         f'매일 아침, 꼭 알아야 할 경제·시사 키워드를 정리합니다.</p>'
         "</div>"
     )
