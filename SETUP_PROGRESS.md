@@ -13,7 +13,8 @@
 - 실측 비용: 1회 약 $0.13 (≈185원), 월 약 5,500원
 - 원칙: 자료에 있는 사실만 / 근거 없으면 WHY IT MATTERS 생략 / 이름·직함은 자료 그대로 / 가벼운 뉴스 제외 / 5~8개
 - 문체: 매거진형 기사체(~습니다), 구어체·상투어 금지
-- 디자인: 딥 네이비(#1f3b73) 상징색, KEYWORD BRIEF 헤더, 읽는 시간, IN THIS BRIEF 목차, EDITOR'S NOTE
+- 디자인 (2026-11-24 확정): 딥 네이비(#1f3b73) 표지 카드(날짜·요일·키워드 수·읽는 시간), 리드 문단, IN THIS BRIEF 목차,
+  ECONOMY/ISSUE 라벨, 번호+#키워드 태그, SOURCES 상자, EDITOR'S NOTE 카드, 해시태그 칩
 - 게시: 매일 07:07 KST 자동 (이메일 → Blogger)
 - 수동 미리보기: Actions → Run workflow → mode=preview (내 Gmail로만 발송, 게시 안 함)
 
