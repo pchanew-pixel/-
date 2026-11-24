@@ -2,6 +2,7 @@
 
 ## ✅ Claude Pro 구독으로 전환 완료 (2026-11-24 미리보기 성공, API 비용 0원)
 - 코드 준비 완료: GitHub Secret `CLAUDE_CODE_OAUTH_TOKEN` 이 있으면 구독(Claude Code)으로 글 작성 → API 비용 0원
+- 작성 모델: Claude Opus 5.5 (구독, 2026-11-24 변경)
 - API 사용 완전 중단 (2026-11-24): 구독 단계가 실패하면 그날은 게시하지 않고 실패 알림만 옴
 - Secret `CLAUDE_CODE_OAUTH_TOKEN` 등록 완료 (줄바꿈은 워크플로가 자동 제거)
 - 토큰은 약 1년 유효 → 만료되면 맥 터미널에서 `~/.local/bin/claude setup-token` 다시 실행 후 Secret 교체
