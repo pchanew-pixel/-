@@ -57,7 +57,6 @@ jobs:
       # 2) 구독 방식: Claude Code(Pro 구독)가 글 작성 + 팩트체크 → work/mag.json
       - name: Write with Claude subscription
         if: ${{ env.HAS_SUBSCRIPTION == 'true' && inputs.mode != 'publish_saved' }}
-        continue-on-error: true   # 실패하면 아래 단계에서 API로 대신 작성
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ env.CLEAN_OAUTH }}
@@ -73,7 +72,6 @@ jobs:
       - run: python scripts/post_daily_news.py
         env:
           MODE: ${{ inputs.mode || 'publish' }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

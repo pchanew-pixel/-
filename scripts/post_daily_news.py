@@ -501,13 +501,11 @@ def main():
         news, sources = collect_news()
         recent = None
     mag = load_subscription_result()
-    if mag is not None:
-        print("[engine] Claude 구독(Claude Code)으로 작성된 글 사용 — API 비용 없음")
-    else:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            raise RuntimeError("구독 방식 결과가 없고 API 키도 없어 글을 만들 수 없습니다.")
-        print("[engine] 구독 결과 없음 → API로 작성")
-        mag = write_magazine(news, today, recent)
+    if mag is None:
+        # API 대체 작성은 사용하지 않는다 (비용 0원 유지). 실패 시 그날은 게시하지 않는다.
+        raise RuntimeError("Claude 구독(Claude Code) 단계에서 글이 만들어지지 않아 오늘은 게시하지 않습니다. "
+                           "Actions 기록의 'Write with Claude subscription' 단계를 확인하세요.")
+    print("[engine] Claude 구독(Claude Code)으로 작성된 글 사용 — API 비용 없음")
 
     # 근거 자료가 없는 항목은 버리고, 분류는 경제/시사로 정리
     mag.items = [i for i in mag.items if any(k in sources for k in i.source_ids)]
