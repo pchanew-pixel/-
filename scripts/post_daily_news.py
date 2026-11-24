@@ -189,15 +189,17 @@ def recent_posts() -> str:
     return "\n".join(lines)
 
 
-def write_magazine(news: str, today: str) -> Magazine:
-    recent = recent_posts()
-    recent_block = f"""
+def _recent_block(recent: str) -> str:
+    return f"""
 [최근 게시한 글 — 중복 금지]
 {recent}
 - 위에서 이미 다룬 사건은 다시 넣지 마세요. 단, 오늘 자료에 의미 있는 새 진전(새 수치·결정·발표)이 있으면
   그 새 내용만 짧게 다루고 headline 도 새 진전 중심으로 쓰세요.
 """ if recent else ""
-    draft = _call(news, f"""오늘은 {today}입니다. 위 자료로 경제·시사 브리프 블로그 글을 작성하세요.
+
+
+def draft_task(today: str, recent: str) -> str:
+    return f"""오늘은 {today}입니다. 위 자료로 경제·시사 브리프 블로그 글을 작성하세요.
 
 [구성]
 - category: "경제" 또는 "시사" 둘 중 하나만.
@@ -210,25 +212,86 @@ def write_magazine(news: str, today: str) -> Magazine:
 - labels: 해시태그로 쓸 검색 키워드 6~8개. 띄어쓰기 없이(예: 경제뉴스, 오늘의뉴스, 환율, 기준금리, 엔비디아).
   고유명사·이슈 키워드 위주로, 일반어는 2개 이하.
 - 날짜: 자료에 적힌 날짜 표현("19일(현지시간)" 등)만 쓰고, "오늘·어제"는 쓰지 마세요.
-{recent_block}""")
+{_recent_block(recent)}"""
 
-    # 2차 검수: 초안의 모든 문장을 자료와 대조해 근거 없는 내용을 지운다
+
+def check_criteria(recent: str) -> str:
+    return f"""검수 기준:
+- 각 항목의 summary·why_it_matters 문장이 그 항목 source_ids 자료에 실제로 적힌 내용인지 확인하세요.
+  자료에 없는 사실·수치·할인·혜택·전망이 섞인 문장은 삭제하거나 자료 수준으로 고치세요.
+- why_it_matters 가 자료로 뒷받침되지 않으면 빈 문자열("")로 바꾸세요.
+- 주제가 겹치는 항목(같은 사건·같은 인물의 후속 기사)은 하나로 합치세요.
+- 최근 게시한 글과 같은 사건을 새 진전 없이 반복한 항목은 빼세요.
+{_recent_block(recent)}
+- 중요도가 낮거나 선별 기준에 맞지 않는 항목(재난·안전 안내, 홍보, 연예 등)은 통째로 빼세요.
+- 문체 기준에 어긋나는 표현은 고치세요.
+- 새로운 사실을 추가하지 마세요."""
+
+
+def write_magazine(news: str, today: str, recent: str | None = None) -> Magazine:
+    """API 방식: 초안 작성 → 별도 호출로 팩트체크."""
+    recent = recent_posts() if recent is None else recent
+    draft = _call(news, draft_task(today, recent))
     return _call(news, f"""당신은 경제 매거진의 팩트체크 담당 편집자입니다.
 위 [자료]와 아래 [초안]을 문장 단위로 대조하세요.
 
 [초안(JSON)]
 {draft.model_dump_json()}
 
-검수 기준:
-- 각 항목의 summary·why_it_matters 문장이 그 항목 source_ids 자료에 실제로 적힌 내용인지 확인하세요.
-  자료에 없는 사실·수치·할인·혜택·전망이 섞인 문장은 삭제하거나 자료 수준으로 고치세요.
-- why_it_matters 가 자료로 뒷받침되지 않으면 빈 문자열("")로 바꾸세요.
-- 주제가 겹치는 항목(같은 사건·같은 인물의 후속 기사)은 하나로 합치세요.
-- 최근 게시한 글과 같은 사건을 새 진전 없이 반복한 항목은 빼세요.
-{recent_block}
-- 중요도가 낮거나 선별 기준에 맞지 않는 항목(재난·안전 안내, 홍보, 연예 등)은 통째로 빼세요.
-- 문체 기준에 어긋나는 표현은 고치세요.
-- 새로운 사실을 추가하지 마세요. 결과는 같은 JSON 구조로 반환하세요.""")
+{check_criteria(recent)} 결과는 같은 JSON 구조로 반환하세요.""")
+
+
+WORK = "work"  # 구독(Claude Code) 방식에서 주고받는 파일 폴더
+
+
+def prepare_for_subscription(news: str, today: str, recent: str) -> None:
+    """Claude Code(구독)가 읽을 작업 지시서와 자료를 파일로 만든다."""
+    import json
+    os.makedirs(WORK, exist_ok=True)
+    schema = json.dumps(Magazine.model_json_schema(), ensure_ascii=False, indent=1)
+    task = f"""# 작업 지시서
+
+아래는 오늘 아침 수집한 한국 뉴스 자료입니다.
+
+[자료]
+{news}
+
+{RULES}
+
+{STYLE}
+
+## 1단계: 초안 작성
+{draft_task(today, recent)}
+
+## 2단계: 팩트체크 (반드시 수행)
+초안을 완성한 뒤, 경제 매거진 팩트체크 담당 편집자로서 초안의 모든 문장을 위 [자료]와 한 문장씩 대조해 고치세요.
+{check_criteria(recent)}
+
+## 3단계: 저장
+팩트체크를 마친 최종본만 `{WORK}/mag.json` 파일로 저장하세요. 다른 파일은 만들지 마세요.
+- 반드시 아래 JSON 스키마를 따르는 JSON 객체 하나만 저장합니다(설명 문장·코드블록 표시 없이).
+- category 는 "경제" 또는 "시사", source_ids 는 [자료]의 번호(정수) 배열입니다.
+
+[JSON 스키마]
+{schema}
+"""
+    with open(f"{WORK}/task.md", "w", encoding="utf-8") as f:
+        f.write(task)
+    print(f"[prepare] {WORK}/task.md 작성 완료 ({len(task)}자)")
+
+
+def load_subscription_result() -> Magazine | None:
+    path = f"{WORK}/mag.json"
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read().strip()
+        text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
+        return Magazine.model_validate_json(text)
+    except Exception as e:
+        print(f"[warn] 구독 방식 결과를 읽지 못함: {e}", file=sys.stderr)
+        return None
 
 
 # 상징색: 신뢰감을 주는 딥 네이비 + 옅은 틴트
@@ -405,6 +468,7 @@ def post(title: str, content: str, labels: list[str]) -> None:
 
 
 def main():
+    import json
     mode = (os.environ.get("MODE") or "publish").strip()
 
     if mode == "publish_saved":  # 미리보기 글을 그대로 게시 (AI 호출 없음)
@@ -416,8 +480,35 @@ def main():
         return
 
     today = datetime.now(KST).strftime("%Y년 %m월 %d일")
-    news, sources = collect_news()
-    mag = write_magazine(news, today)
+
+    if mode == "prepare":  # 1단계: 자료 수집 → Claude Code(구독)용 지시서 작성
+        news, sources = collect_news()
+        recent = recent_posts()
+        prepare_for_subscription(news, today, recent)
+        with open(f"{WORK}/state.json", "w", encoding="utf-8") as f:
+            json.dump({"news": news, "recent": recent,
+                       "sources": {str(k): v for k, v in sources.items()}}, f, ensure_ascii=False)
+        return
+
+    # 2단계: 구독 방식 결과가 있으면 사용, 없으면 API로 작성
+    state_path = f"{WORK}/state.json"
+    if os.path.exists(state_path):
+        with open(state_path, encoding="utf-8") as f:
+            st = json.load(f)
+        news, recent = st["news"], st["recent"]
+        sources = {int(k): v for k, v in st["sources"].items()}
+    else:
+        news, sources = collect_news()
+        recent = None
+    mag = load_subscription_result()
+    if mag is not None:
+        print("[engine] Claude 구독(Claude Code)으로 작성된 글 사용 — API 비용 없음")
+    else:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError("구독 방식 결과가 없고 API 키도 없어 글을 만들 수 없습니다.")
+        print("[engine] 구독 결과 없음 → API로 작성")
+        mag = write_magazine(news, today, recent)
+
     # 근거 자료가 없는 항목은 버리고, 분류는 경제/시사로 정리
     mag.items = [i for i in mag.items if any(k in sources for k in i.source_ids)]
     for i in mag.items:
@@ -434,7 +525,7 @@ def main():
         mag.title = f"{mag.title}, {short} 브리프"
     content = render_html(mag, today, sources)
     total = sum(COST_LOG)
-    print(f"[cost] 오늘 AI 비용 합계: ${total:.4f} (약 {total * 1400:.0f}원, 환율 1,400원 가정)")
+    print(f"[cost] 오늘 API 비용 합계: ${total:.4f} (약 {total * 1400:.0f}원, 환율 1,400원 가정)")
 
     # 게시가 실패해도 만든 글은 남도록 항상 파일로 저장 (Actions 결과의 output 파일)
     with open("output.html", "w", encoding="utf-8") as f:
@@ -445,7 +536,6 @@ def main():
     if os.environ.get("DRY_RUN") == "1":
         print("DRY_RUN: 파일 저장 완료")
     elif mode == "preview":
-        import json
         used = {k: sources[k] for i in mag.items for k in i.source_ids if k in sources}
         print("[preview-json] " + json.dumps(
             {"today": today, "mag": mag.model_dump(), "sources": used}, ensure_ascii=False))

@@ -1,5 +1,10 @@
 # 설정 진행 상황 (2026-11-19 업데이트)
 
+## 🔄 Claude Pro 구독으로 전환 (2026-11-24 준비)
+- 코드 준비 완료: GitHub Secret `CLAUDE_CODE_OAUTH_TOKEN` 이 있으면 구독(Claude Code)으로 글 작성 → API 비용 0원
+- 구독 단계가 실패하면 자동으로 기존 API(`ANTHROPIC_API_KEY`)로 작성 (크레딧 있을 때만)
+- 남은 일: 내 PC에서 `claude setup-token` 으로 토큰 발급 → Secret `CLAUDE_CODE_OAUTH_TOKEN` 등록 → 미리보기 실행
+
 ## ✅ 최종 확정 설정 (2026-11-19, 사용자 승인)
 - AI: Claude Sonnet 5.5, 생각 깊이 high — 글쓰기 + 2차 팩트체크 (자료 캐시 할인)
 - 실측 비용: 1회 약 $0.13 (≈185원), 월 약 5,500원

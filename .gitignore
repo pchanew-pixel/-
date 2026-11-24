@@ -2,3 +2,4 @@ client_secret.json
 output.html
 __pycache__/
 .env
+work/
